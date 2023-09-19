@@ -1,0 +1,37 @@
+make_geom.sh - making the displacement in geometries 
+
+
+After the geometries are computed 
+1. bash organize_data_after_calcul.sh ~/proj_ir_raman/input_geometries
+2. bash get_data_RR_eng_df.sh ~/proj_ir_raman/input_geometries/
+3. 
+
+
+
+
+get_energy_zero_field.sh 
+
+Gets energies of the system with displacements computed at field == 0.00 0.00 0.00
+Format is the csv 
+
+!!! later to update for it to enter into the log folder and from there to extract data 
+--------------------------------------------------------------------------------------------------------------------------------------------------------------
+calc_RR_energy_zero_field.sh
+
+From previously created .csv file for dE/dx dE/dy dE/dz, with RR calculate the actual value for dE/dx dE/dy dE/dz. 
+Script is iterating over all atoms. Also, it is making a matrix with these values. 
+
+----------------------------------------------------------------------------------
+
+get_miu_for_nm_calc.sh
+
+Makes a single file with columns with values of dmiux/dx, dmiux/dy, dmiux/dz (same for miuy and miuz)
+This column is to be used for getting the normal modes dux/dQ duy/dQ duz/dQ
+
+example of input 
+
+bash get_miu_for_nm_calc.sh path/to/file 
+
+Output is created in path/to/file 
+
+

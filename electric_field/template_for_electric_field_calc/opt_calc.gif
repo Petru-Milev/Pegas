@@ -1,0 +1,7 @@
+%chk=freq_calc.chk
+#p opt blyp/6-31G scf(conver=11,maxcycles=1000,xqc) nosymm integral(grid=ultrafine) 
+iop(3/14=-6) iop(3/27=20) iop(11/27=20)
+
+Name 
+
+0 1

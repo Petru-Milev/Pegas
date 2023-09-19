@@ -1,0 +1,30 @@
+#!/bin/bash
+#SBATCH -p normal
+#SBATCH -N 1
+#SBATCH -c 4
+#SBATCH --mem=40GB
+#SBATCH -t 10:00:00
+#SBATCH --export=none
+
+module load gaussian/16.C.01
+
+input_files=~/pegas/electric_field/files
+work_dir=$1
+
+echo $(date)
+for atom in $(ls $work_dir); do
+for displacement in $(ls ${work_dir}/${atom}); do
+
+
+cd "${work_dir}/${atom}/${displacement}"
+pwd
+
+for file in $(ls $input_files); do
+
+cp "${input_files}/${file}" "${work_dir}/${atom}/${displacement}"
+g16 "${file}"
+
+done
+done
+done
+echo $(date)

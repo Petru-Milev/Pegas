@@ -1,0 +1,15 @@
+User manual 
+
+Files are submitted to main.sh 
+
+Format of submission is 
+
+bash main.sh ./geometries/*filename* *name for the folder of final data* 
+
+make_geom.sh - makes the displaced geometries in the ./input_geometries  folder 
+Each atom is a separate folder with multiple folders corresponding to the displacement in atoms.
+
+run_gaussian.job arg_1="absolute path to the file"
+
+From the folder electric_field/files takes the input files and copies them to the corresponding folders
+and then submits the job to the gaussian

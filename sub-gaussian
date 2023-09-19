@@ -1,0 +1,227 @@
+#!/bin/bash
+#
+# last mod: Mateusz Jedrzejewski <mateusz.jedrzejewski@pwr.edu.pl>
+
+partition=normal
+nodes=1
+cores=1
+mem=10
+time_limit=6
+
+run_formchk=0
+
+# --------------------------------------------   HELP   --------------------------------------------
+if [ $# -lt 1 ]
+then
+	echo "Usage: $0 FILE PARAMETERS"
+	echo "Parameters:"
+	echo -e "\t-p PARTITION \t\t Set partition (queue). Default = $partition"
+	echo -e "\t-c CORES \t\t Up to 48. Default = $cores"
+	echo -e "\t-m MEMORY \t\t In GB, up to 180 (must be integer value). Default = ${mem} + 1 (gauss safety margin)"
+	echo -e "\t-t TIME_LIMIT \t\t In hours. Default = $time_limit"
+
+	echo -e "\t-f \t\t\t run formchk on the checkpoint file on the end"
+	echo -e "\t-d PATH \t\t input file directory, default -- current directory"
+	echo -e "\t--copy FILE1 FILE2 ...\t copy additional [checkpoint] files to working directory"
+	exit 1
+fi
+
+# -----------------------------------------   PARAM SORT   -----------------------------------------
+param_err=0
+unset input_file	# preventive unset
+
+until [ -z $1 ]
+do
+		if [ $1 = "-p" ]
+		then
+				partition="$2"
+				shift; shift
+		elif [ $1 = "-c" ]
+		then
+				cores="$2"
+				shift; shift
+				if [ -n "`echo $cores | grep '[^[:digit:]]'`" ]
+				then
+						echo "Cores value must be a number!"
+						param_err=1
+				fi
+		elif [ $1 = "-m" ]
+	then
+		mem=$2
+				shift; shift
+				if [ -n "`echo $mem | grep '[^[:digit:]]'`" ]
+				then
+						echo "Memory size must be a number!"
+						param_err=1
+				fi
+	elif [ $1 = "-b" ]
+	then
+		mem_buffer=$2
+		shift; shift
+		if [ -n "`echo $mem_buffer | grep '[^[:digit:]]'`" ]
+		then
+			echo "Memory buffer size must be a number!"
+			param_err=1
+		fi
+	elif [ $1 = "-t" ]
+		then
+				time_limit="$2"
+				shift; shift
+				if [ -n "`echo $time_limit | grep '[^[:digit:]]'`" ]
+				then
+						echo "Time limit must be a number!"
+						param_err=1
+				fi
+ 
+	elif [ $1 = "-f" ]
+	then
+		run_formchk="1"
+		shift
+		elif [ $1 = "--notify" ]
+		then
+				notify="$2"
+				shift; shift
+				if [ -n "`echo $notify | grep '[^[b,e]]'`" ]
+				then
+						echo "Notificatioan can be one of three: b, e, be"
+						param_err=1
+				fi
+	elif [ $1 = "-d" ]
+		then
+				workdir="$2"
+				shift; shift
+		elif [ $1 = "--copy" ]
+		then
+				file_list="$2"
+				shift; shift
+	elif [ $1 = "-l" ]
+		then
+				lustre_scratch=1
+				shift
+	elif [ -n "`echo $1 | grep ^-`" ]
+		then
+				echo "Unknown option: $1"
+		shift; shift
+				param_err=1
+		else
+		if [ -z "$input_file" ]
+		then
+					input_file=$1
+					shift
+		else
+			echo "Unknown parameter: $1"
+			shift
+			param_err=1
+		fi
+		fi
+done
+
+if [ $param_err -eq 1 ]
+then
+		exit 1
+fi
+
+if [ -z "$input_file" ]
+then
+		echo "You have to specify the input file!"
+		exit 1
+fi
+
+if [ -z "$workdir" ]
+then
+	workdir=`pwd`
+#    echo "working directory = $workdir"
+#    echo ""
+	if [ ! -f $input_file ]
+	then
+		echo "Input file $input_file is missing!"
+		exit 1
+#	else
+#		grep -qi Link1 $input_file && \
+#			echo "Zadania wielostopniowe (Link1) prosze wstawiac do kolejki jako osobne! Please submit multi-step jobs (Link1) separately!" && \
+#			exit 1
+	fi
+fi
+
+
+# -----------------------------------------  SOME DEBUG MS -----------------------------------------
+#debug=0
+
+# -----------------------------------------   ACTUAL SUB   -----------------------------------------
+input_f=$(basename "$input_file")
+input_fname="${input_f%.*}"
+#mem_buff=$(echo $mem*1.1 | bc | awk -F '.' '{print $1}')
+mem_buff=$(echo ${mem}*1.1 | bc | cut -d '.' -f1 )
+slurm_mem=$(($mem+1))
+[ $mem_buff -gt $slurm_mem ] && slurm_mem=$mem_buff
+
+cat << EOF | sbatch
+#!/bin/bash
+#SBATCH -p $partition
+#SBATCH -N $nodes
+#SBATCH -c $cores
+#SBATCH --mem=${slurm_mem}GB
+#SBATCH -J ${input_fname}
+#SBATCH -t ${time_limit}:00:00
+#SBATCH --export=none
+
+module load gaussian/16.C.01
+export GAUSS_MDEF=${mem}GB
+
+
+echo -e "\nJOB START:\t\$(date)"
+echo ""
+
+echo $workdir
+cd $workdir
+
+###		KOPIOWANIE DODATKOWYCH PLIKÓW CHK DO WORKDIR, SKIP IF FILE IS THERE
+for f in "$file_list"
+do
+	if [ -f "\$f" ]
+	then
+		dest_file=\`basename \$f\`
+		if [ -f \$dest_file ]
+		then
+			echo "File \$dest_file is already there, skipping"
+		else
+			cp \$f .
+		fi
+	#else
+		#echo "There is no file \$f, skipping"
+	fi
+done
+
+
+### 	STARTOWANIE APLIKACJI
+
+echo $input_file
+g16 $input_file
+
+if [ $run_formchk -eq 1 ]
+then
+		tail ${input_fname}.log | grep -q "Normal termination of Gaussian"
+		if [ \$? -eq 0 ]
+		then
+				chk_filename=\`cat $input_file | dos2unix | awk -F = '/\%chk=/ {CHK_FILE=\$2} END {print CHK_FILE}'\`
+				fchk_filename=\`echo \$chk_filename | sed -e 's/\(.*\).chk$/\1.fchk/g'\`
+				
+				formchk -3 \$chk_filename \$fchk_filename
+		fi
+fi
+
+#echo ""
+echo -e "\nJOB END:\t\$(date)"
+
+EOF
+
+# --------------------------------------------   INFO   --------------------------------------------
+echo "The job is being submitted with the following parameters:" 1>&2
+echo 1>&2
+printf "\t%-12s %s \n" "file" $input_file 1>&2
+printf "\t%-12s %s\n" "partition" $partition 1>&2
+printf "\t%-12s %s\n" "nodes" $nodes 1>&2
+printf "\t%-12s %s\n" "cores" $cores 1>&2
+printf "\t%-12s %s GB \n" "memory" $slurm_mem 1>&2
+printf "\t%-12s %s hours\n" "time limit" $time_limit 1>&2
+echo 1>&2
